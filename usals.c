@@ -1,5 +1,5 @@
-/*    usals - usals tool for rotate DVB S2 card
- *    based on blindscan-s2 -- blindscan tool for the Linux DVB S2 API
+/* usals - usals tool for rotate DVB S2 card
+ * based on blindscan-s2 -- blindscan tool for the Linux DVB S2 API
  * l2mrroberto@gmail.com
  * chinesebob@gmail.com
  *
@@ -179,8 +179,32 @@ int main(int argc, char *argv[])
 	if (verbose)
 		printf("%s\n", "(c) 2022 TVEpg.eu (l2mrroberto@gmail.com)");
 
-	if (sat_long)
-			motor_usals(fefd, site_lat, site_long, sat_long, verbose, motor_wait_time);
+	if (sat_long) {
+		/* Southern Hemisphere Patch:
+		 * Standard DiSEqC motors are mounted upside down (facing North) in the 
+		 * Southern Hemisphere, mechanically reversing their East/West movements. 
+		 * Telling the motor to go "West" makes it physically swing "East". 
+		 * To fix this without touching the internal DiSEqC command generator, 
+		 * we mirror the target satellite's longitude across the site's longitude.
+		 * This gracefully tricks the motor calculation into sending the exact 
+		 * opposite command (e.g., sending an "East" command so the motor 
+		 * physically swings "West" to your target). We also force absolute 
+		 * latitude so declination math remains correct.
+		 */
+		double calc_lat = site_lat;
+		double calc_sat_long = sat_long;
+
+		if (site_lat < 0.0) {
+			calc_lat = -site_lat; 
+			calc_sat_long = site_long + (site_long - sat_long);
+			
+			if (verbose) {
+				printf("Southern Hemisphere offset applied: Internal target mirrored to %.2f to reverse motor direction.\n", calc_sat_long);
+			}
+		}
+
+		motor_usals(fefd, calc_lat, site_long, calc_sat_long, verbose, motor_wait_time);
+	}
 	else {
 		printf("%s\n", usage);
 		exit(1);
@@ -337,7 +361,7 @@ void tune(int fefd, int tpfreq, int symrate, int polarity, int fec, int delsys, 
 //	struct dvb_frontend_event ev;
 
        /* discard stale QPSK events */
-/*        while (1) {
+/* while (1) {
                 if (ioctl(fefd, FE_GET_EVENT, &ev) == -1)
                 break;
         }
@@ -528,4 +552,3 @@ void getinfo(int fefd, int lof, unsigned int verbose) {
 	}
 
 }
-
